@@ -25,6 +25,8 @@ class Worker(Process):
         while True:
             try:
                 self.handle(self.queue.get())
+            except KeyboardInterrupt:
+                self.terminate()
             except:
                 LOGGER.error("Unable to process request: %s", traceback.format_exc())
 

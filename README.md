@@ -12,3 +12,10 @@ retrieves the built website and deploys it. Hence it's use is mostly to automate
 connecting to a University's VPN.
 
 [Hooknook]:https://github.com/sampsyo/hooknook
+
+## Installation
+
+To install:
+```shell
+python -m pip install git+https://github.com/awadell1/scottyhook@main
+```

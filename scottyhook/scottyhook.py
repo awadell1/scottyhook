@@ -48,10 +48,12 @@ def deploy(payload):
 def cli(args=None):
     parser = argparse.ArgumentParser("scottyhook")
     parser.add_argument("--config", type=str, default=".scottyhook.yml")
+    parser.add_argument("--port", type=int, default=80)
+    parser.add_argument("--host", type=str, default="0.0.0.0")
     args = parser.parse_args()
 
     app.config["SCOTTYHOOK_CONFIG"] = args.config
-    app.run()
+    app.run(host=args.host, port=args.port)
 
 
 if __name__ == "__main__":
