@@ -7,6 +7,6 @@ setup(
     author="Alexius Wadell",
     author_email="awadell@gmail.com",
     packages=find_packages(),
-    install_requires=["flask", "pyyaml", "requests"],
+    install_requires=["flask", "pyyaml", "requests", "netaddr"],
     entry_points={"console_scripts": ["scottyhook=scottyhook.scottyhook:cli"]},
 )
