@@ -24,7 +24,7 @@ def app_setup(app=app):
 
     # Create a worker thread.
     if not hasattr(app, "worker"):
-        app.worker = Worker(app.scottyhook_config)
+        app.worker = Worker(app.config["SCOTTYHOOK_CONFIG"])
         app.worker.start()
 
     # Get Whitelist
@@ -69,14 +69,16 @@ def hook():
 
 def deploy(payload):
     if payload["action"] != "released":
-        logging.info("Release is not released -> skipping")
+        LOGGER.info("Release is not released -> skipping")
         return flask.jsonify(status="not yet released"), 200
 
     # Push job to worker
     try:
         app.worker.queue.put(payload, block=False)
+        LOGGER.info("Added to deploy queue")
         return flask.jsonify(status="will deploy"), 200
     except Full:
+        LOGGER.error("Deploy queue is full")
         return flask.jsonify(status="deploy queue is full"), 503
 
 

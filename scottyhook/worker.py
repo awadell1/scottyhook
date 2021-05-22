@@ -4,17 +4,20 @@ import traceback
 import threading
 import time
 from zipfile import ZipFile
-from multiprocessing import Process, Queue
+from multiprocessing import Queue
 from tempfile import TemporaryDirectory, NamedTemporaryFile
 import requests
+import yaml
 
 
-class Worker(Process):
-    def __init__(self, config):
+class Worker(threading.Thread):
+    logger = logging.getLogger("worker")
+
+    def __init__(self, config_file):
         super().__init__()
-        self.config = config
+        with open(config_file, "r") as io:
+            self.config = yaml.safe_load(io)
         self.queue = Queue(maxsize=10)
-        self.logger = logging.getLogger("worker")
 
     def run(self):
         """ Wait for sites to deploy and then deploy them """
@@ -54,7 +57,7 @@ class Worker(Process):
     def get_repo_config(self, repo):
         # Load config
         try:
-            repo_config = self.config["site"][repo]
+            repo_config = self.config["sites"][repo]
         except KeyError:
             logging.error("Missing Config for %s", repo)
             raise
@@ -96,11 +99,11 @@ class RcloneThread(threading.Thread):
         runtime = time.monotonic() - start_time
         if out.returncode == 0:
             self.logger.info(
-                "synced %s to %s in %.2f", self.src.name, self.dst, runtime
+                "synced %s to %s in %.2fs", self.src.name, self.dst, runtime
             )
         else:
             self.logger.error(
-                "exited with %d when syncing %s to %s, runtime: %.2f, stdout: %s, stderr:%s",
+                "exited with %d when syncing %s to %s, runtime: %.2fs, stdout: %s, stderr:%s",
                 out.returncode,
                 self.src.name,
                 self.dst,
