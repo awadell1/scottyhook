@@ -1,0 +1,17 @@
+api:
+  # These IP Addresses can make post requests against the api
+  # If `github` is included will fetch IP's from https://api.github.com/meta
+  whitelist:
+    - 127.0.0.1
+    - github
+
+sites:
+  # List out the GitHub Repos that scottyhook will get hooks for
+  #   asset: Name of the zip file to download from the release
+  #   publisher: rclone target to sync the asset to
+  - user/site_repo:
+      asset: "site-publish.zip"
+      publisher: cmu-awps:/collections/venkatgroup
+  - BattModels/group-website:
+      asset: "site-publish.zip"
+      publisher: cmu-awps:/collections/incepts

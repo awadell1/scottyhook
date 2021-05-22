@@ -1,23 +1,22 @@
 import logging
 import subprocess
 import traceback
+import threading
+import time
 from zipfile import ZipFile
-from multiprocessing import Process, Queue
+from multiprocessing import Queue
 from tempfile import TemporaryDirectory, NamedTemporaryFile
-from subprocess import run
 import requests
 import yaml
 
-logging.basicConfig(
-    filename="worker.log", level=logging.DEBUG,
-)
-LOGGER = logging.getLogger()
 
+class Worker(threading.Thread):
+    logger = logging.getLogger("worker")
 
-class Worker(Process):
     def __init__(self, config_file):
         super().__init__()
-        self.config_file = config_file
+        with open(config_file, "r") as io:
+            self.config = yaml.safe_load(io)
         self.queue = Queue(maxsize=10)
 
     def run(self):
@@ -28,44 +27,40 @@ class Worker(Process):
             except KeyboardInterrupt:
                 self.terminate()
             except:
-                LOGGER.error("Unable to process request: %s", traceback.format_exc())
+                self.logger.error(
+                    "Unable to process request: %s", traceback.format_exc()
+                )
 
     def handle(self, payload):
         """ Handle Release Payloads """
         # Get Release
         if not ("release" in payload and "assets" in payload["release"]):
-            logging.error("Missing Assets in Payload\n%s", payload)
+            self.logger.error("Missing Assets in Payload\n%s", payload)
             raise RuntimeError()
 
         # Get Repo
         if not ("repository" in payload and "full_name" in payload["repository"]):
-            logging.error("Missing Repository in Payload\n%s", payload)
+            self.logger.error("Missing Repository in Payload\n%s", payload)
             raise RuntimeError()
 
         # Fetch built Website from GitHub
         repo_name = payload["repository"]["full_name"]
-        logging.info("Got Deploy Request for %s", repo_name)
+        self.logger.info("received deploy request for %s", repo_name)
         repo_config = self.get_repo_config(repo_name)
         site_dir = fetch_asset(payload["release"]["assets_url"], repo_config["asset"])
 
         # Deploy Website
         host_target = repo_config["publisher"]
-        cmd = ["rclone", "-P", "-v", "sync", site_dir.name, host_target]
-        LOGGER.debug("%s", cmd)
-        out = subprocess.run(cmd, universal_newlines=True)
-        LOGGER.debug(
-            "rclone (%d), stdout: %s, stderr: %s",
-            out.returncode,
-            out.stdout,
-            out.stderr,
-        )
-        site_dir.cleanup()
-        logging.info("Finished Deployed Request for %s", repo_name)
+        RcloneThread(site_dir, host_target).start()
+        self.logger.info("started rclone for %s", site_dir.name)
 
     def get_repo_config(self, repo):
         # Load config
-        with open(self.config_file, "r") as io:
-            repo_config = yaml.safe_load(io)[repo]
+        try:
+            repo_config = self.config["sites"][repo]
+        except KeyError:
+            logging.error("Missing Config for %s", repo)
+            raise
 
         # Fill in default values
         default_config = {
@@ -78,13 +73,56 @@ class Worker(Process):
         return repo_config
 
 
+class RcloneThread(threading.Thread):
+    def __init__(self, src: TemporaryDirectory, dst: str):
+        super().__init__()
+        self.src = src
+        self.dst = dst
+        self.logger = logging.getLogger("RcloneThread")
+
+    def run(self):
+        """ Run rclone in a separate thread """
+        start_time = time.monotonic()
+        cmd = ["rclone", "-P", "-v", "sync", self.src.name, self.dst]
+        self.logger.debug(" ".join(cmd))
+        try:
+            out = subprocess.run(cmd, shell=True, universal_newlines=True, timeout=900)
+        except subprocess.TimeoutExpired:
+            # Log exception and return
+            self.logger.error(
+                "timeout syncing %s: %s", self.src.name, traceback.format_exc()
+            )
+            self.src.cleanup()
+            return
+
+        # Log completion of rclone
+        runtime = time.monotonic() - start_time
+        if out.returncode == 0:
+            self.logger.info(
+                "synced %s to %s in %.2fs", self.src.name, self.dst, runtime
+            )
+        else:
+            self.logger.error(
+                "exited with %d when syncing %s to %s, runtime: %.2fs, stdout: %s, stderr:%s",
+                out.returncode,
+                self.src.name,
+                self.dst,
+                runtime,
+                out.stderr,
+                out.stdout,
+            )
+
+        # Delete the source directory
+        self.src.cleanup()
+
+
 def fetch_asset(assets_url, asset_name):
     """ Fetch the pre-build website from Github """
 
     # Get list of assets
-    LOGGER.debug("Fetching assets list from %s", assets_url)
+    logging.debug("Fetching assets list from %s", assets_url)
     assets = requests.get(assets_url).json()
-    LOGGER.debug(assets)
+    logging.debug(assets)
     for item in assets:
         if item["name"] == asset_name:
             asset = item
@@ -94,7 +132,7 @@ def fetch_asset(assets_url, asset_name):
         raise RuntimeError()
 
     # Download asset
-    LOGGER.info("Fetching %s from %s", asset_name, asset["browser_download_url"])
+    logging.info("Fetching %s from %s", asset_name, asset["browser_download_url"])
     resp = requests.get(asset["browser_download_url"], allow_redirects=True)
     repo_deployable = TemporaryDirectory()
     with NamedTemporaryFile("wb", delete=False) as repo_zip:
