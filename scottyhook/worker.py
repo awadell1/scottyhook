@@ -46,19 +46,21 @@ class Worker(Process):
         repo_name = payload["repository"]["full_name"]
         logging.info("Got Deploy Request for %s", repo_name)
         repo_config = self.get_repo_config(repo_name)
-        site_dir = fetch_asset(payload["release"]["assets"], repo_config["asset"])
+        site_dir = fetch_asset(payload["release"]["assets_url"], repo_config["asset"])
 
         # Deploy Website
         host_target = repo_config["publisher"]
-        cmd = ["rclone", "-P", "sync", "site_dir", host_target]
-        out = subprocess.run(cmd, text=True, capture_output=True)
-        LOGGER.info(
+        cmd = ["rclone", "-P", "-v", "sync", site_dir.name, host_target]
+        LOGGER.debug("%s", cmd)
+        out = subprocess.run(cmd, universal_newlines=True)
+        LOGGER.debug(
             "rclone (%d), stdout: %s, stderr: %s",
             out.returncode,
             out.stdout,
             out.stderr,
         )
         site_dir.cleanup()
+        logging.info("Finished Deployed Request for %s", repo_name)
 
     def get_repo_config(self, repo):
         # Load config
@@ -76,9 +78,13 @@ class Worker(Process):
         return repo_config
 
 
-def fetch_asset(assets, asset_name):
+def fetch_asset(assets_url, asset_name):
     """ Fetch the pre-build website from Github """
-    asset = None
+
+    # Get list of assets
+    LOGGER.debug("Fetching assets list from %s", assets_url)
+    assets = requests.get(assets_url).json()
+    LOGGER.debug(assets)
     for item in assets:
         if item["name"] == asset_name:
             asset = item
@@ -91,10 +97,9 @@ def fetch_asset(assets, asset_name):
     LOGGER.info("Fetching %s from %s", asset_name, asset["browser_download_url"])
     resp = requests.get(asset["browser_download_url"], allow_redirects=True)
     repo_deployable = TemporaryDirectory()
-    with NamedTemporaryFile("wb") as repo_zip:
+    with NamedTemporaryFile("wb", delete=False) as repo_zip:
         repo_zip.write(resp.content)
-        repo_zip.flush()
-        repo_zip.seek(0)
+        repo_zip.close()
         ZipFile(repo_zip.name).extractall(path=repo_deployable.name)
 
     return repo_deployable
