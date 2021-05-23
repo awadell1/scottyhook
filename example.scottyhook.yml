@@ -5,6 +5,10 @@ api:
     - 127.0.0.1
     - github
 
+  # Uncomment and fill in with secret used to compute HMAC Digest on Github
+  # See: https://docs.github.com/en/developers/webhooks-and-events/webhooks/securing-your-webhooks
+  # secret:
+
 sites:
   # List out the GitHub Repos that scottyhook will get hooks for
   #   asset: Name of the zip file to download from the release

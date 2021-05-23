@@ -1,7 +1,8 @@
 import logging
 import argparse
+import hmac
+import hashlib
 from queue import Full
-import requests
 import yaml
 import flask
 from flask import Flask
@@ -48,6 +49,37 @@ def verify_client():
     return False
 
 
+def verify_signature():
+    if "secret" not in app.scottyhook_config["api"]:
+        LOGGER.debug("api.secret not set -> not validating")
+        return True
+    secret = app.scottyhook_config["api"]["secret"]
+
+    if "X-Hub-Signature-256" in request.headers:
+        server_digest = request.headers["X-Hub-Signature-256"]
+        digestmod = hashlib.sha256
+    elif "X-Hub-Signature" in request.headers:
+        server_digest = request.headers["X-Hub-Signature-256"]
+        digestmod = hashlib.sha1
+    else:
+        LOGGER.debug("missing server digest")
+        return False
+
+    # Compute Digest
+    our_digest = (
+        "sha256="
+        + hmac.new(
+            secret.encode(),
+            digestmod=digestmod,
+            msg=request.get_data(as_text=True).encode(),
+        ).hexdigest()
+    )
+    valid = hmac.compare_digest(our_digest, server_digest)
+    if not valid:
+        LOGGER.debug("server digest: %s, our digest: %s", server_digest, our_digest)
+    return valid
+
+
 @app.route("/", methods=["POST"])
 def hook():
 
@@ -57,6 +89,9 @@ def hook():
         LOGGER.warning("Request from not whitelisted IP: %s", request.remote_addr)
         return flask.jsonify(status="not on whitelist"), 403
 
+    if not verify_signature():
+        return flask.jsonify(status="Unauthorized"), 401
+
     # Dispatch based on event type.
     event_type = request.headers.get("X-GitHub-Event")
     if not event_type:
@@ -65,6 +100,8 @@ def hook():
         return flask.jsonify(status="pong")
     elif event_type == "release":
         return deploy(request.get_json())
+    else:
+        return flask.jsonify(status="not a hook"), 403
 
 
 def deploy(payload):
