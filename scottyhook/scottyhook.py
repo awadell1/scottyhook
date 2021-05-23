@@ -8,7 +8,7 @@ from flask import Flask
 from flask import request
 import netaddr
 from .worker import Worker
-from . import utils
+from .utils import get_with_backoff, setup_logging
 
 
 app = Flask(__name__)
@@ -31,7 +31,7 @@ def app_setup(app=app):
     whitelist = []
     for ip in app.scottyhook_config["api"]["whitelist"]:
         if ip == "github":
-            github_ip = requests.get("https://api.github.com/meta").json()["hooks"]
+            github_ip = get_with_backoff("https://api.github.com/meta").json()["hooks"]
             whitelist.extend([netaddr.IPNetwork(x) for x in github_ip])
         else:
             whitelist.append(ip)
@@ -91,7 +91,7 @@ def cli(args=None):
     args = parser.parse_args()
 
     # Configure logging
-    logger = utils.setup_logging()
+    logger = setup_logging()
     if args.verbose:
         logger.setLevel(logging.DEBUG)
     else:

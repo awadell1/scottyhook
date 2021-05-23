@@ -6,8 +6,8 @@ import time
 from zipfile import ZipFile
 from multiprocessing import Queue
 from tempfile import TemporaryDirectory, NamedTemporaryFile
-import requests
 import yaml
+from .utils import get_with_backoff
 
 
 class Worker(threading.Thread):
@@ -25,7 +25,7 @@ class Worker(threading.Thread):
             try:
                 self.handle(self.queue.get())
             except KeyboardInterrupt:
-                self.terminate()
+                return
             except:
                 self.logger.error(
                     "Unable to process request: %s", traceback.format_exc()
@@ -121,7 +121,7 @@ def fetch_asset(assets_url, asset_name):
 
     # Get list of assets
     logging.debug("Fetching assets list from %s", assets_url)
-    assets = requests.get(assets_url).json()
+    assets = get_with_backoff(assets_url).json()
     logging.debug(assets)
     for item in assets:
         if item["name"] == asset_name:
@@ -133,7 +133,7 @@ def fetch_asset(assets_url, asset_name):
 
     # Download asset
     logging.info("Fetching %s from %s", asset_name, asset["browser_download_url"])
-    resp = requests.get(asset["browser_download_url"], allow_redirects=True)
+    resp = get_with_backoff(asset["browser_download_url"], allow_redirects=True)
     repo_deployable = TemporaryDirectory()
     with NamedTemporaryFile("wb", delete=False) as repo_zip:
         repo_zip.write(resp.content)
