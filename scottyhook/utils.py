@@ -1,6 +1,7 @@
 import logging
 from logging.handlers import TimedRotatingFileHandler
 import requests
+import time
 
 
 def setup_logging():
