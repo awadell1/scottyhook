@@ -38,7 +38,7 @@ def exp_backoff(max_retries=10, wait_time=0.5, exception=requests.exceptions.HTT
     return rwb
 
 
-@exp_backoff
+@exp_backoff()
 def get_with_backoff(*args, **kwargs):
     resp = requests.get(*args, **kwargs)
     resp.raise_for_status()
