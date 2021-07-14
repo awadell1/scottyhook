@@ -6,7 +6,7 @@ import time
 
 def setup_logging():
     """ Set up logging for scottyhook """
-    logger = logging.getLogger()
+    logger = logging.getLogger("scottyhook")
     handler = TimedRotatingFileHandler("scottyhook.log", when="W6", backupCount=4)
 
     # Set Logging Format
@@ -19,17 +19,28 @@ def setup_logging():
     return logger
 
 
-def get_with_backoff(*args, max_retries=10, wait_time=0.5, **kwargs):
-    attempts = 0
-    while True:
-        try:
-            resp = requests.get(*args, **kwargs)
-            resp.raise_for_status()
-            return resp
-        except requests.exceptions.HTTPError:
-            attempts += 1
-            if attempts <= max_retries:
-                time.sleep(wait_time * 2 ** attempts)
-            else:
-                raise
+def exp_backoff(max_retries=10, wait_time=0.5, exception=requests.exceptions.HTTPError):
+    def rwb(func):
+        def wrapper(*args, **kwargs):
+            attempts = 0
+            while True:
+                try:
+                    return func(*args, **kwargs)
+                except exception:
+                    attempts += 1
+                    if attempts <= max_retries:
+                        time.sleep(wait_time * 2 ** attempts)
+                    else:
+                        raise
+
+        return wrapper
+
+    return rwb
+
+
+@exp_backoff()
+def get_with_backoff(*args, **kwargs):
+    resp = requests.get(*args, **kwargs)
+    resp.raise_for_status()
+    return resp
 

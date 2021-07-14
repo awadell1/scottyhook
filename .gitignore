@@ -130,3 +130,6 @@ dmypy.json
 
 # Ignore Default Config
 .scottyhook.yml
+
+# Ignore Log Files
+*.log.*

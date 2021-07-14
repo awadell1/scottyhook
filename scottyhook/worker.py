@@ -7,17 +7,20 @@ from zipfile import ZipFile
 from multiprocessing import Queue
 from tempfile import TemporaryDirectory, NamedTemporaryFile
 import yaml
-from .utils import get_with_backoff
+from .utils import exp_backoff, get_with_backoff
 
 
 class Worker(threading.Thread):
-    logger = logging.getLogger("worker")
+    logger = logging.getLogger("scottyhook-worker")
 
     def __init__(self, config_file):
         super().__init__()
         with open(config_file, "r") as io:
             self.config = yaml.safe_load(io)
         self.queue = Queue(maxsize=10)
+
+        # Set Logging level to match scottyhook loggger
+        self.logger.setLevel(logging.getLogger("scottyhook").getEffectiveLevel())
 
     def run(self):
         """ Wait for sites to deploy and then deploy them """
@@ -116,6 +119,7 @@ class RcloneThread(threading.Thread):
         self.src.cleanup()
 
 
+@exp_backoff(wait_time=2.0)
 def fetch_asset(assets_url, asset_name):
     """ Fetch the pre-build website from Github """
 
@@ -123,6 +127,9 @@ def fetch_asset(assets_url, asset_name):
     logging.debug("Fetching assets list from %s", assets_url)
     assets = get_with_backoff(assets_url).json()
     logging.debug(assets)
+
+    # Check if the expected asset has been uploaded
+    asset = None
     for item in assets:
         if item["name"] == asset_name:
             asset = item
