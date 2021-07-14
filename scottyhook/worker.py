@@ -11,13 +11,16 @@ from .utils import exp_backoff, get_with_backoff
 
 
 class Worker(threading.Thread):
-    logger = logging.getLogger("worker")
+    logger = logging.getLogger("scottyhook-worker")
 
     def __init__(self, config_file):
         super().__init__()
         with open(config_file, "r") as io:
             self.config = yaml.safe_load(io)
         self.queue = Queue(maxsize=10)
+
+        # Set Logging level to match scottyhook loggger
+        self.logger.setLevel(logging.getLogger("scottyhook").getEffectiveLevel())
 
     def run(self):
         """ Wait for sites to deploy and then deploy them """

@@ -6,7 +6,7 @@ import time
 
 def setup_logging():
     """ Set up logging for scottyhook """
-    logger = logging.getLogger()
+    logger = logging.getLogger("scottyhook")
     handler = TimedRotatingFileHandler("scottyhook.log", when="W6", backupCount=4)
 
     # Set Logging Format
